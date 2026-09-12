@@ -164,9 +164,28 @@ async def drive_tui():
         assert app.screen.query_one("#board").option_count > 0
 
 
+async def drive_theme():
+    from focus.tui import BoardApp
+
+    os.environ["FOCUS_THEME"] = "nord"
+    app = BoardApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.theme == "nord", app.theme
+
+    os.environ["FOCUS_THEME"] = "not-a-theme"
+    app = BoardApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.theme != "not-a-theme", "an unknown theme must not be applied"
+    del os.environ["FOCUS_THEME"]
+
+
 for check in (test_storage, test_status_commands, test_malformed_json, test_grouping):
     check()
     print(f"✓ {check.__name__}")
 asyncio.run(drive_tui())
 print("✓ drive_tui")
+asyncio.run(drive_theme())
+print("✓ drive_theme")
 print("\nall checks passed")

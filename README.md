@@ -4,24 +4,7 @@ A minimal terminal workboard. When you are juggling several tasks across termina
 tabs and Claude Code sessions and lose the thread, type `focus` and see what you
 were doing.
 
-```
-╭────────────────────────────────────────────────╮
-│                  MY FOCUS                      │
-╰────────────────────────────────────────────────╯
-
-ACTIVE
-
-  14718  Loading Studies
-         🟡 WORKING       🤖 Claude
-
-  14725  WebView Permission
-         🟣 SELF-REVIEW   👨‍💻 Me
-
-REVIEW
-
-  14712  Scroll bar
-         🔵 REVIEW        🤖 Claude
-```
+![The focus dashboard, with tasks grouped by status](docs/dashboard.png)
 
 Six statuses (`TODO`, `WORKING`, `SELF-REVIEW`, `REVIEW`, `BLOCKED`, `DONE`), two
 owners (Me, Claude), an optional task URL and MR URL. Nothing else — no
@@ -48,10 +31,49 @@ focus done 14718
 focus block 14718
 ```
 
-**Dashboard:** `↑↓` navigate · `Enter` open · `a` add · `r` reload · `q` quit.
+On the dashboard: `↑↓` navigate · `Enter` open · `a` add · `r` reload · `q` quit.
 
-**Task detail:** `o` open task URL · `m` open MR URL · `s` start · `f` self-review ·
-`v` review · `d` done · `b` block · `esc` back. Buttons are clickable too.
+### Task detail
+
+`Enter` on a task opens it. Every status is one keystroke away, and the two links
+open in your default browser — `o` for the task, `m` for the merge request. A
+button is greyed out when the task has no such link.
+
+![Task detail, showing status, owner, both links, and the action buttons](docs/detail.png)
+
+`o` open task URL · `m` open MR URL · `s` start · `f` self-review · `v` review ·
+`d` done · `b` block · `esc` back. The buttons are clickable too.
+
+### Adding a task
+
+`a` on the dashboard, or `focus add` from the shell. New tasks start as `TODO`;
+both URLs may be left empty.
+
+![The add-task form with an ID, title, owner, and task URL filled in](docs/add.png)
+
+`tab` moves between fields · `↑↓` and `space` pick the owner · `ctrl+s` saves ·
+`esc` cancels.
+
+## Themes
+
+`ctrl+p` opens the command palette, where *Change theme* previews any of Textual's
+themes for the current session. To keep one, set `FOCUS_THEME` in your shell
+profile:
+
+```bash
+export FOCUS_THEME=nord
+```
+
+| `nord` | `gruvbox` |
+| :--- | :--- |
+| ![](docs/theme-nord.png) | ![](docs/theme-gruvbox.png) |
+
+| `tokyo-night` | `catppuccin-latte` |
+| :--- | :--- |
+| ![](docs/theme-tokyo-night.png) | ![](docs/theme-catppuccin-latte.png) |
+
+Any Textual theme name works — `dracula`, `monokai`, `solarized-light`,
+`rose-pine`, `flexoki`, and the rest. An unknown name is ignored.
 
 ## Data
 
@@ -61,11 +83,11 @@ Tasks live in `~/.focus/tasks.json`, created on first write:
 [
   {
     "id": "14718",
-    "title": "Loading Studies",
+    "title": "Loading studies takes 8s on cold start",
     "status": "working",
     "owner": "claude",
     "url": "https://openproject.example.com/work_packages/14718",
-    "mr_url": "https://gitlab.example.com/project/merge_requests/123"
+    "mr_url": "https://gitlab.example.com/app/-/merge_requests/412"
   }
 ]
 ```

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import webbrowser
 
 from rich.text import Text
@@ -313,11 +314,19 @@ class AddScreen(ModalScreen[dict | None]):
             self.dismiss(None)
 
 
+def _apply_theme(app: App) -> None:
+    """$FOCUS_THEME picks a Textual theme; ctrl+p switches for one session only."""
+    theme = os.environ.get("FOCUS_THEME")
+    if theme and theme in app.available_themes:
+        app.theme = theme
+
+
 class BoardApp(App):
     CSS = CSS
     TITLE = "focus"
 
     def on_mount(self) -> None:
+        _apply_theme(self)
         self.push_screen(Board())
 
 
@@ -326,6 +335,7 @@ class AddApp(App[dict | None]):
     TITLE = "focus add"
 
     def on_mount(self) -> None:
+        _apply_theme(self)
         self.push_screen(AddScreen(), callback=self.exit)
 
 
