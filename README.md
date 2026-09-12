@@ -86,3 +86,7 @@ python -m venv .venv && .venv/bin/pip install textual
 - No delete or edit command — fix mistakes in `tasks.json`.
 - Last writer wins; two dashboards open at once can clobber each other's status
   change. Press `r` to reload.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

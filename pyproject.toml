@@ -3,6 +3,8 @@ name = "focus"
 version = "1.0.0"
 description = "Minimal terminal workboard: what am I working on right now?"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = ["textual>=1.0"]
 
 [project.scripts]
