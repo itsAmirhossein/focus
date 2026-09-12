@@ -1,0 +1,16 @@
+[project]
+name = "focus"
+version = "1.0.0"
+description = "Minimal terminal workboard: what am I working on right now?"
+requires-python = ">=3.10"
+dependencies = ["textual>=1.0"]
+
+[project.scripts]
+focus = "focus.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["focus"]
