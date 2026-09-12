@@ -130,7 +130,8 @@ class Board(Screen):
     BINDINGS = [
         Binding("a", "add", "Add"),
         Binding("r", "reload", "Reload"),
-        Binding("q", "quit", "Quit"),
+        # "app." prefix required: action_quit lives on App, not on this screen.
+        Binding("q", "app.quit", "Quit"),
     ]
 
     def compose(self) -> ComposeResult:

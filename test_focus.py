@@ -163,6 +163,11 @@ async def drive_tui():
 
         assert app.screen.query_one("#board").option_count > 0
 
+        # q quits from the dashboard (needs the app.quit namespace, not quit).
+        await pilot.press("q")
+        await pilot.pause()
+        assert not app.is_running, "q must exit the app"
+
 
 async def drive_theme():
     from focus.tui import BoardApp
