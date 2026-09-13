@@ -78,26 +78,22 @@ def test_malformed_json():
 
 
 def test_grouping():
-    def rows(options):
-        return [o for o in options if o is not None]  # separators take no index
-
     options, first = _board_options(
         [
-            {"id": "9", "title": "t", "status": "working"},
             {"id": "8", "title": "t", "status": "done"},
+            {"id": "9", "title": "t", "status": "working"},
         ]
     )
-    assert rows(options)[first].id == "9", "first selectable row is the active task"
-    assert [o.id for o in rows(options) if o.id] == ["9", "8"]
+    assert options[first].id == "9", "first selectable row is the active task"
+    assert [o.id for o in options if o.id] == ["9", "8"], "groups keep their order"
+    assert len(options) == 4, "empty groups are hidden, only two headers"
 
-    # A task in a later group: the highlight must skip the empty groups' rows,
-    # and the separators between them must not shift the index.
+    # A task in a later group: the highlight must skip the header row.
     options, first = _board_options([{"id": "7", "title": "t", "status": "done"}])
-    assert rows(options)[first].id == "7", rows(options)[first]
-    assert not rows(options)[first].disabled, "highlight must land on a selectable row"
+    assert options[first].id == "7" and not options[first].disabled, options[first]
 
     options, first = _board_options([])
-    assert first is None, "nothing to highlight on an empty board"
+    assert first is None and len(options) == 1, "empty board shows only a hint"
 
 
 async def drive_tui():
@@ -106,7 +102,8 @@ async def drive_tui():
     storage.save(
         [
             {"id": "100", "title": "Active one", "status": "working"},
-            {"id": "200", "title": "Waiting", "status": "todo"},
+            # Brackets must render as text, not crash as markup.
+            {"id": "200", "title": "Fix [urgent] bug", "status": "todo"},
         ]
     )
 

@@ -4,56 +4,46 @@ from __future__ import annotations
 
 import os
 
-from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
+from textual.markup import escape
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, Footer, Input, Label, OptionList, Static
 from textual.widgets.option_list import Option
 
 from . import storage
 
-STATUS_LABEL = {
-    "todo": "⚪ TODO",
-    "working": "🟡 WORKING",
-    "self-review": "🟣 SELF-REVIEW",
-    "review": "🔵 REVIEW",
-    "blocked": "🔴 BLOCKED",
-    "done": "✓ DONE",
-}
-STATUS_STYLE = {
-    "todo": "dim",
-    "working": "yellow",
-    "self-review": "magenta",
-    "review": "blue",
-    "blocked": "red",
-    "done": "green",
+# status -> (icon, label, color). Theme variables keep the colors legible in every theme.
+STATUS = {
+    "todo": ("○", "To do", "$text-muted"),
+    "working": ("●", "Working", "$warning"),
+    "self-review": ("◐", "Self-review", "$warning"),
+    "review": ("◆", "In review", "$primary"),
+    "blocked": ("■", "Blocked", "$error"),
+    "done": ("✓", "Done", "$success"),
 }
 
 # Dashboard groups, in the order they answer "what am I working on right now?".
 GROUPS = (
-    ("ACTIVE", ("working", "self-review")),
-    ("REVIEW", ("review",)),
-    ("BLOCKED", ("blocked",)),
-    ("TODO", ("todo",)),
-    ("DONE", ("done",)),
+    ("In progress", ("working", "self-review")),
+    ("In review", ("review",)),
+    ("Blocked", ("blocked",)),
+    ("To do", ("todo",)),
+    ("Done", ("done",)),
 )
 
 CSS = """
-#title {
-    border: round $accent;
-    text-align: center;
-    text-style: bold;
-    color: $accent;
-    margin: 1 2 0 2;
-}
+#top { height: auto; padding: 1 2; background: $boost; }
+#brand { width: auto; margin-right: 4; text-style: bold; color: $accent; }
+#summary { width: 1fr; }
 
-#board {
+#board, #board:focus {
     height: 1fr;
-    margin: 0 1;
+    max-height: 100%;
     border: none;
-    background: $surface;
+    padding: 0 1;
+    background: $background;
 }
 
 #detail { border: round $accent; margin: 1 2; padding: 0 1; }
@@ -75,30 +65,41 @@ AddScreen { align: center middle; }
 
 
 def _task_option(task: dict) -> Option:
-    prompt = Text.assemble(
-        "  ",
-        task["title"],
-        "\n    ",
-        (STATUS_LABEL[task["status"]], STATUS_STYLE[task["status"]]),
-    )
-    return Option(prompt, id=task["id"])
+    icon, label, color = STATUS[task["status"]]
+    title = escape(task["title"])
+    if task["status"] == "done":
+        title = f"[dim strike]{title}[/]"
+    elif task["status"] == "self-review":
+        title += f"  [dim italic]{label.lower()}[/]"
+    return Option(f"  [{color}]{icon}[/]  {title}", id=task["id"])
 
 
-def _board_options(tasks: list[dict]) -> tuple[list, int | None]:
-    """Build the grouped option list; also report the index of the first task."""
-    options: list = []
-    for label, statuses in GROUPS:
-        options.append(Option(Text(label, style="bold"), disabled=True))
+def _board_options(tasks: list[dict]) -> tuple[list[Option], int | None]:
+    """Build the grouped option list, hiding empty groups; also report the first task's index."""
+    options: list[Option] = []
+    for name, statuses in GROUPS:
         group = [t for t in tasks if t["status"] in statuses]
         if not group:
-            options.append(Option(Text("  None", style="dim"), disabled=True))
+            continue
+        color = STATUS[statuses[0]][2]
+        gap = "\n" if options else ""
+        header = f"{gap}[bold {color}]{name.upper()}[/]  [dim]{len(group)}[/]"
+        options.append(Option(header, disabled=True))
         options.extend(_task_option(task) for task in group)
-        options.append(None)  # separator: drawn as a divider, not an option
-
-    # Separators take no index, so count them out before locating the first task.
-    rows = [option for option in options if option is not None]
-    first_task = next((i for i, option in enumerate(rows) if option.id), None)
+    if not options:
+        options.append(Option("  [dim]No tasks yet. Press [bold]a[/] to add one.[/]", disabled=True))
+    first_task = next((i for i, option in enumerate(options) if option.id), None)
     return options, first_task
+
+
+def _summary(tasks: list[dict]) -> str:
+    """One line with every group's count, so the whole board reads at a glance."""
+    parts = []
+    for name, statuses in GROUPS:
+        count = sum(t["status"] in statuses for t in tasks)
+        icon, _, color = STATUS[statuses[0]]
+        parts.append(f"[{color if count else '$text-disabled'}]{icon} {count} {name.lower()}[/]")
+    return "   ".join(parts)
 
 
 class Board(Screen):
@@ -110,7 +111,9 @@ class Board(Screen):
     ]
 
     def compose(self) -> ComposeResult:
-        yield Static("MY FOCUS", id="title")
+        with Horizontal(id="top"):
+            yield Static("focus", id="brand")
+            yield Static(id="summary")
         yield OptionList(id="board")
         yield Footer()
 
@@ -118,8 +121,10 @@ class Board(Screen):
         self.reload()
 
     def reload(self) -> None:
+        tasks = storage.load()
+        self.query_one("#summary", Static).update(_summary(tasks))
         board = self.query_one("#board", OptionList)
-        options, first_task = _board_options(storage.load())
+        options, first_task = _board_options(tasks)
         board.clear_options()
         board.add_options(options)
         board.focus()
@@ -142,7 +147,7 @@ class Board(Screen):
 class Detail(Screen):
     BINDINGS = [
         Binding("escape", "back", "Back"),
-        Binding("s","set_status('working')", "Start"),
+        Binding("s", "set_status('working')", "Start"),
         Binding("f", "set_status('self-review')", "Self-rev"),
         Binding("v", "set_status('review')", "Review"),
         Binding("d", "set_status('done')", "Done"),
@@ -165,7 +170,7 @@ class Detail(Screen):
     def compose(self) -> ComposeResult:
         task = self.task_data
         with VerticalScroll(id="detail"):
-            yield Static(task.get("title", ""), id="detail-title")
+            yield Static(task.get("title", ""), id="detail-title", markup=False)
             yield Static(self._body())
             with Horizontal(classes="row"):
                 yield Button("Start", id="s_working")
@@ -177,10 +182,9 @@ class Detail(Screen):
                 yield Button("Back", id="back")
         yield Footer()
 
-    def _body(self) -> Text:
-        task = self.task_data
-        status = task.get("status", "todo")
-        return Text.assemble("\nStatus:  ", (STATUS_LABEL[status], STATUS_STYLE[status]))
+    def _body(self) -> str:
+        icon, label, color = STATUS[self.task_data.get("status", "todo")]
+        return f"\nStatus:  [{color}]{icon} {label}[/]"
 
     def on_mount(self) -> None:
         if not self.task_data:
@@ -192,7 +196,7 @@ class Detail(Screen):
 
     def action_set_status(self, status: str) -> None:
         storage.set_status(self.task_id, status)
-        self.app.notify(f"{self.task_data['title']} → {status.upper()}")
+        self.app.notify(f"{self.task_data['title']} → {status.upper()}", markup=False)
         self.dismiss()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
