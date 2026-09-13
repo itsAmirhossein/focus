@@ -9,8 +9,8 @@ were doing.
 The top line counts every group, so the whole board reads at a glance. Empty
 groups are hidden.
 
-A task is a title and one of six statuses (`TODO`, `WORKING`, `SELF-REVIEW`,
-`REVIEW`, `BLOCKED`, `DONE`). Nothing else — no IDs, links, owners, priorities,
+A task is a title and one of five statuses (`TODO`, `WORKING`, `REVIEW`,
+`BLOCKED`, `DONE`). Nothing else — no IDs, links, owners, priorities,
 deadlines, tags, or time tracking.
 
 ## Install
@@ -29,7 +29,6 @@ focus                    # open the dashboard
 focus add                # add a task (form)
 focus add Fix login      # add a task (no form)
 focus start login        # ✓ Fix login → WORKING
-focus self-review login
 focus review login
 focus done login
 focus block login
@@ -46,7 +45,7 @@ On the dashboard: `↑↓` navigate · `a` add · `r` reload · `q` quit.
 Press a status key on the highlighted task — the highlight follows it to its new
 group:
 
-`s` start · `f` self-review · `v` review · `b` block · `t` to do · `d` done
+`s` start · `v` review · `b` block · `t` to do · `d` done
 
 Or press `Enter` to pick from a list, with the current status highlighted. The
 same keys work there; `esc` cancels.
@@ -97,7 +96,7 @@ Tasks live in `~/.focus/tasks.json`, created on first write:
 
 Edit it by hand if you like. `id` is focus's internal key — leave it out on new
 rows and one is assigned. Fields from older versions (`owner`, `url`, `mr_url`)
-are dropped the next time focus saves.
+are dropped the next time focus saves, and `self-review` tasks become `working`.
 
 A file that cannot be parsed is moved aside to `tasks.json.corrupt` rather than
 overwritten. Set `FOCUS_HOME` to keep the data somewhere else.

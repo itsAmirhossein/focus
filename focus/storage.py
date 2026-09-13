@@ -7,7 +7,7 @@ import os
 import tempfile
 from pathlib import Path
 
-STATUSES = ("todo", "working", "self-review", "review", "blocked", "done")
+STATUSES = ("todo", "working", "review", "blocked", "done")
 
 HOME = Path(os.environ.get("FOCUS_HOME") or Path.home() / ".focus")
 DATA_FILE = HOME / "tasks.json"
@@ -15,10 +15,13 @@ DATA_FILE = HOME / "tasks.json"
 
 def _clean(task: dict) -> dict:
     """Coerce a raw dict into the task shape; junk values fall back to defaults."""
+    status = task.get("status")
+    if status == "self-review":  # retired status; those tasks were still in progress
+        status = "working"
     return {
         "id": str(task.get("id") or "").strip(),
         "title": str(task.get("title") or "").strip(),
-        "status": task.get("status") if task.get("status") in STATUSES else "todo",
+        "status": status if status in STATUSES else "todo",
     }
 
 

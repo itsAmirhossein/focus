@@ -18,7 +18,6 @@ from . import storage
 STATUS = {
     "todo": ("○", "To do", "$text-muted"),
     "working": ("●", "Working", "$warning"),
-    "self-review": ("◐", "Self-review", "$warning"),
     "review": ("◆", "In review", "$primary"),
     "blocked": ("■", "Blocked", "$error"),
     "done": ("✓", "Done", "$success"),
@@ -26,7 +25,7 @@ STATUS = {
 
 # Dashboard groups, in the order they answer "what am I working on right now?".
 GROUPS = (
-    ("In progress", ("working", "self-review")),
+    ("In progress", ("working",)),
     ("In review", ("review",)),
     ("Blocked", ("blocked",)),
     ("To do", ("todo",)),
@@ -36,7 +35,6 @@ GROUPS = (
 # One key per status, shared by the board and the picker so they never disagree.
 MOVES = (
     ("s", "working", "Start"),
-    ("f", "self-review", "Self-review"),
     ("v", "review", "Review"),
     ("b", "blocked", "Block"),
     ("t", "todo", "To do"),
@@ -72,12 +70,10 @@ StatusPicker, AddScreen { align: center middle; }
 
 
 def _task_option(task: dict) -> Option:
-    icon, label, color = STATUS[task["status"]]
+    icon, _, color = STATUS[task["status"]]
     title = escape(task["title"])
     if task["status"] == "done":
         title = f"[dim strike]{title}[/]"
-    elif task["status"] == "self-review":
-        title += f"  [dim italic]{label.lower()}[/]"
     return Option(f"  [{color}]{icon}[/]  {title}", id=task["id"])
 
 

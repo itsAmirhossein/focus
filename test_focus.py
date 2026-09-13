@@ -66,6 +66,7 @@ def test_malformed_json():
         {"id": 55, "title": " Old ", "status": "bogus", "owner": "me", "url": "x"},
         {"title": "Hand-added"},
         {"id": 55, "title": "Copy-pasted"},
+        {"id": 9, "title": "Retired status", "status": "self-review"},
         "junk",
         {},
     ]))
@@ -74,6 +75,7 @@ def test_malformed_json():
         {"id": "55", "title": "Old", "status": "todo"},
         {"id": "56", "title": "Hand-added", "status": "todo"},
         {"id": "57", "title": "Copy-pasted", "status": "todo"},
+        {"id": "9", "title": "Retired status", "status": "working"},
     ], tasks
 
 
@@ -116,22 +118,22 @@ async def drive_tui():
         await pilot.pause()
 
         # Enter opens the picker with the current status highlighted: down + enter
-        # moves "working" one step, to self-review.
+        # moves "working" one step, to review.
         await pilot.press("enter")
         await pilot.pause()
         assert isinstance(app.screen, StatusPicker), app.screen
         await pilot.press("down", "enter")
         await pilot.pause()
         assert isinstance(app.screen, Board)
-        assert storage.get("100")["status"] == "self-review"
+        assert storage.get("100")["status"] == "review"
 
         # Escape cancels; a key in the picker moves directly.
         await pilot.press("enter", "escape")
         await pilot.pause()
-        assert isinstance(app.screen, Board) and storage.get("100")["status"] == "self-review"
-        await pilot.press("enter", "v")
+        assert isinstance(app.screen, Board) and storage.get("100")["status"] == "review"
+        await pilot.press("enter", "b")
         await pilot.pause()
-        assert storage.get("100")["status"] == "review"
+        assert storage.get("100")["status"] == "blocked"
 
         # Hotkeys work straight from the board, and the highlight follows the task.
         assert highlighted_id() == "100"

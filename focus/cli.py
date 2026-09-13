@@ -8,7 +8,6 @@ from . import storage
 
 STATUS_COMMANDS = {
     "start": "working",
-    "self-review": "self-review",
     "review": "review",
     "done": "done",
     "block": "blocked",
@@ -16,13 +15,12 @@ STATUS_COMMANDS = {
 
 HELP = """focus — minimal terminal workboard
 
-  focus                       open the board
-  focus add [title]           add a task
-  focus start <title>         → WORKING
-  focus self-review <title>   → SELF-REVIEW
-  focus review <title>        → REVIEW
-  focus done <title>          → DONE
-  focus block <title>         → BLOCKED
+  focus                  open the board
+  focus add [title]      add a task
+  focus start <title>    → WORKING
+  focus review <title>   → REVIEW
+  focus done <title>     → DONE
+  focus block <title>    → BLOCKED
 
 <title> can be any unique part of the title, e.g. `focus done login`.
 Tasks live in {path}
