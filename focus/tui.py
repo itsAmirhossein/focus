@@ -35,12 +35,12 @@ GROUPS = (
 
 # One key per status, shared by the board and the picker so they never disagree.
 MOVES = (
-    ("s", "working"),
-    ("f", "self-review"),
-    ("v", "review"),
-    ("b", "blocked"),
-    ("t", "todo"),
-    ("d", "done"),
+    ("s", "working", "Start"),
+    ("f", "self-review", "Self-review"),
+    ("v", "review", "Review"),
+    ("b", "blocked", "Block"),
+    ("t", "todo", "To do"),
+    ("d", "done", "Done"),
 )
 
 CSS = """
@@ -113,8 +113,8 @@ class Board(Screen):
     BINDINGS = [
         Binding("a", "add", "Add"),
         *(
-            Binding(key, f"move('{status}')", STATUS[status][1], show=status in ("working", "done"))
-            for key, status in MOVES
+            Binding(key, f"move('{status}')", verb, show=status in ("working", "done"))
+            for key, status, verb in MOVES
         ),
         Binding("r", "reload", "Reload", show=False),
         # "app." prefix required: action_quit lives on App, not on this screen.
@@ -183,7 +183,7 @@ class StatusPicker(ModalScreen[str | None]):
 
     BINDINGS = [
         Binding("escape", "pick", "Cancel"),
-        *(Binding(key, f"pick('{status}')", show=False) for key, status in MOVES),
+        *(Binding(key, f"pick('{status}')", show=False) for key, status, _ in MOVES),
     ]
 
     def __init__(self, task: dict) -> None:
@@ -193,7 +193,7 @@ class StatusPicker(ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         current = self.task_data["status"]
         options = []
-        for key, status in MOVES:
+        for key, status, _ in MOVES:
             icon, label, color = STATUS[status]
             now = "  [dim]← now[/]" if status == current else ""
             options.append(Option(f"[bold $accent]{key}[/]   [{color}]{icon}  {label}[/]{now}", id=status))
@@ -205,7 +205,7 @@ class StatusPicker(ModalScreen[str | None]):
 
     def on_mount(self) -> None:
         moves = self.query_one("#moves", OptionList)
-        moves.highlighted = [status for _, status in MOVES].index(self.task_data["status"])
+        moves.highlighted = [status for _, status, _ in MOVES].index(self.task_data["status"])
 
     def action_pick(self, status: str | None = None) -> None:
         self.dismiss(status)
