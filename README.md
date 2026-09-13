@@ -6,6 +6,9 @@ were doing.
 
 ![The focus dashboard, with tasks grouped by status](docs/dashboard.png)
 
+The top line counts every group, so the whole board reads at a glance. Empty
+groups are hidden.
+
 A task is a title and one of six statuses (`TODO`, `WORKING`, `SELF-REVIEW`,
 `REVIEW`, `BLOCKED`, `DONE`). Nothing else — no IDs, links, owners, priorities,
 deadlines, tags, or time tracking.
@@ -32,11 +35,9 @@ focus done login
 focus block login
 ```
 
-Status commands take any unique part of a task's title, case-insensitive. If it
-matches more than one task, focus lists them and changes nothing.
-
-The top line counts every group, so the whole board reads at a glance. Empty
-groups are hidden.
+Status commands take any unique part of a task's title, case-insensitive; an
+exact title always wins. If it matches more than one task, focus lists them and
+changes nothing.
 
 On the dashboard: `↑↓` navigate · `a` add · `r` reload · `q` quit.
 
@@ -96,9 +97,10 @@ Tasks live in `~/.focus/tasks.json`, created on first write:
 
 Edit it by hand if you like. `id` is focus's internal key — leave it out on new
 rows and one is assigned. Fields from older versions (`owner`, `url`, `mr_url`)
-are dropped the next time focus saves. A file that cannot be parsed is moved aside to
-`tasks.json.corrupt` rather than overwritten. Set `FOCUS_HOME` to keep the data
-somewhere else.
+are dropped the next time focus saves.
+
+A file that cannot be parsed is moved aside to `tasks.json.corrupt` rather than
+overwritten. Set `FOCUS_HOME` to keep the data somewhere else.
 
 ## Tests
 
