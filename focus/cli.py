@@ -16,14 +16,15 @@ STATUS_COMMANDS = {
 
 HELP = """focus — minimal terminal workboard
 
-  focus                    open the dashboard
-  focus add                add a task
-  focus start <id>         → WORKING
-  focus self-review <id>   → SELF-REVIEW
-  focus review <id>        → REVIEW
-  focus done <id>          → DONE
-  focus block <id>         → BLOCKED
+  focus                       open the board
+  focus add [title]           add a task
+  focus start <title>         → WORKING
+  focus self-review <title>   → SELF-REVIEW
+  focus review <title>        → REVIEW
+  focus done <title>          → DONE
+  focus block <title>         → BLOCKED
 
+<title> can be any unique part of the title, e.g. `focus done login`.
 Tasks live in {path}
 """.format(path=storage.DATA_FILE)
 
@@ -61,27 +62,39 @@ def _run(args: list[str]) -> int:
         return 0
 
     if command == "add":
-        if _needs_terminal():
+        title = " ".join(rest).strip()
+        if title:
+            task = storage.add(title)
+        elif _needs_terminal():
             return 2
-        from .tui import run_add
+        else:
+            from .tui import run_add
 
-        task = run_add()
+            task = run_add()
         if task:
-            print(f"✓ Task {task['id']} added")
+            print(f"✓ Added: {task['title']}")
             return 0
         print("✗ Cancelled.")
         return 1
 
     if command in STATUS_COMMANDS:
-        if len(rest) != 1:
-            print(f"usage: focus {command} <task_id>", file=sys.stderr)
+        query = " ".join(rest).strip()
+        if not query:
+            print(f"usage: focus {command} <title>", file=sys.stderr)
             return 2
-        task_id, status = rest[0], STATUS_COMMANDS[command]
-        if storage.set_status(task_id, status):
-            print(f"✓ {task_id} → {status.upper()}")
-            return 0
-        print(f"✗ Task {task_id} not found.", file=sys.stderr)
-        return 1
+        matches = storage.find(query)
+        if not matches:
+            print(f"✗ No task matches “{query}”.", file=sys.stderr)
+            return 1
+        if len(matches) > 1:
+            print(f"✗ “{query}” matches {len(matches)} tasks, be more specific:", file=sys.stderr)
+            for task in matches:
+                print(f"    {task['title']}", file=sys.stderr)
+            return 1
+        task, status = matches[0], STATUS_COMMANDS[command]
+        storage.set_status(task["id"], status)
+        print(f"✓ {task['title']} → {status.upper()}")
+        return 0
 
     print(f"✗ Unknown command: {command}\n", file=sys.stderr)
     print(HELP, file=sys.stderr)

@@ -6,9 +6,9 @@ were doing.
 
 ![The focus dashboard, with tasks grouped by status](docs/dashboard.png)
 
-Six statuses (`TODO`, `WORKING`, `SELF-REVIEW`, `REVIEW`, `BLOCKED`, `DONE`), two
-owners (Me, Claude), an optional task URL and MR URL. Nothing else — no
-priorities, deadlines, tags, or time tracking.
+A task is a title and one of six statuses (`TODO`, `WORKING`, `SELF-REVIEW`,
+`REVIEW`, `BLOCKED`, `DONE`). Nothing else — no IDs, links, owners, priorities,
+deadlines, tags, or time tracking.
 
 ## Install
 
@@ -23,36 +23,35 @@ macOS.
 
 ```bash
 focus                    # open the dashboard
-focus add                # add a task
-focus start 14718        # ✓ 14718 → WORKING
-focus self-review 14718
-focus review 14718
-focus done 14718
-focus block 14718
+focus add                # add a task (form)
+focus add Fix login      # add a task (no form)
+focus start login        # ✓ Fix login → WORKING
+focus self-review login
+focus review login
+focus done login
+focus block login
 ```
+
+Status commands take any unique part of a task's title, case-insensitive. If it
+matches more than one task, focus lists them and changes nothing.
 
 On the dashboard: `↑↓` navigate · `Enter` open · `a` add · `r` reload · `q` quit.
 
 ### Task detail
 
-`Enter` on a task opens it. Every status is one keystroke away, and the two links
-open in your default browser — `o` for the task, `m` for the merge request. A
-button is greyed out when the task has no such link.
+`Enter` on a task opens it. Every status is one keystroke away.
 
-![Task detail, showing status, owner, both links, and the action buttons](docs/detail.png)
+![Task detail, showing status and the action buttons](docs/detail.png)
 
-`o` open task URL · `m` open MR URL · `s` start · `f` self-review · `v` review ·
-`d` done · `b` block · `esc` back. The buttons are clickable too.
+`s` start · `f` self-review · `v` review · `d` done · `b` block · `esc` back.
+The buttons are clickable too.
 
 ### Adding a task
 
-`a` on the dashboard, or `focus add` from the shell. New tasks start as `TODO`;
-both URLs may be left empty.
+`a` on the dashboard, or `focus add` from the shell. Type a title, press
+`Enter`. New tasks start as `TODO`; `esc` cancels.
 
-![The add-task form with an ID, title, owner, and task URL filled in](docs/add.png)
-
-`tab` moves between fields · `↑↓` and `space` pick the owner · `ctrl+s` saves ·
-`esc` cancels.
+![The add-task form](docs/add.png)
 
 ## Themes
 
@@ -82,17 +81,16 @@ Tasks live in `~/.focus/tasks.json`, created on first write:
 ```json
 [
   {
-    "id": "14718",
+    "id": "3",
     "title": "Loading studies takes 8s on cold start",
-    "status": "working",
-    "owner": "claude",
-    "url": "https://openproject.example.com/work_packages/14718",
-    "mr_url": "https://gitlab.example.com/app/-/merge_requests/412"
+    "status": "working"
   }
 ]
 ```
 
-Edit it by hand if you like. A file that cannot be parsed is moved aside to
+Edit it by hand if you like. `id` is focus's internal key — leave it out on new
+rows and one is assigned. Fields from older versions (`owner`, `url`, `mr_url`)
+are dropped the next time focus saves. A file that cannot be parsed is moved aside to
 `tasks.json.corrupt` rather than overwritten. Set `FOCUS_HOME` to keep the data
 somewhere else.
 

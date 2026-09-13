@@ -23,36 +23,36 @@ def run_cli(*args):
 def test_storage():
     assert storage.load() == [], "empty list when no file exists"
 
-    assert storage.add({"id": "1", "title": "No links", "owner": "me"})
-    assert not storage.add({"id": "1", "title": "Duplicate"}), "duplicate id rejected"
-    assert storage.add(
-        {
-            "id": "2",
-            "title": "With links",
-            "owner": "claude",
-            "url": "https://example.com/wp/2",
-            "mr_url": "https://example.com/mr/2",
-        }
-    )
+    first = storage.add("Fix login")
+    second = storage.add("Fix login redirect")
+    assert (first["id"], second["id"]) == ("1", "2"), "ids are assigned in order"
 
     tasks = storage.load()
-    assert [t["id"] for t in tasks] == ["1", "2"]
-    assert tasks[0]["status"] == "todo", "new tasks start as TODO"
-    assert tasks[0]["url"] == "" and tasks[0]["mr_url"] == "", "links are optional"
-    assert tasks[1]["owner"] == "claude"
-    assert json.loads(storage.DATA_FILE.read_text())[1]["mr_url"].endswith("/mr/2")
+    assert tasks[0] == {"id": "1", "title": "Fix login", "status": "todo"}, tasks
+    assert json.loads(storage.DATA_FILE.read_text())[1]["title"] == "Fix login redirect"
+
+    assert [t["id"] for t in storage.find("REDIRECT")] == ["2"], "match ignores case"
+    assert [t["id"] for t in storage.find("fix login")] == ["1"], "exact title wins"
+    assert len(storage.find("fix")) == 2
+    assert storage.find("nope") == []
 
 
-def test_status_commands():
+def test_cli():
     for command, status in cli.STATUS_COMMANDS.items():
-        code, out = run_cli(command, "1")
-        assert code == 0 and out == f"✓ 1 → {status.upper()}", out
+        code, out = run_cli(command, "fix", "login")  # words join, no quotes needed
+        assert code == 0 and out == f"✓ Fix login → {status.upper()}", out
         assert storage.get("1")["status"] == status
 
+    code, out = run_cli("done", "fix")
+    assert code == 1 and "matches 2 tasks" in out and "Fix login redirect" in out, out
     code, out = run_cli("done", "nope")
-    assert code == 1 and out == "✗ Task nope not found.", out
+    assert code == 1 and out == "✗ No task matches “nope”.", out
 
-    assert run_cli("start")[0] == 2, "missing id is a usage error"
+    code, out = run_cli("add", "Write", "docs")
+    assert code == 0 and out == "✓ Added: Write docs", out
+    assert storage.find("write docs")[0]["status"] == "todo"
+
+    assert run_cli("start")[0] == 2, "missing title is a usage error"
     assert run_cli("frobnicate", "1")[0] == 2, "unknown command"
     assert run_cli("--help")[0] == 0
 
@@ -62,17 +62,19 @@ def test_malformed_json():
     assert storage.load() == [], "malformed file reads as empty"
     assert storage.DATA_FILE.with_name("tasks.json.corrupt").exists(), "bad file kept"
 
-    storage.DATA_FILE.write_text('[{"id": 55, "status": "bogus", "owner": null}, "junk", {}]')
+    storage.DATA_FILE.write_text(json.dumps([
+        {"id": 55, "title": " Old ", "status": "bogus", "owner": "me", "url": "x"},
+        {"title": "Hand-added"},
+        {"id": 55, "title": "Copy-pasted"},
+        "junk",
+        {},
+    ]))
     tasks = storage.load()
-    assert len(tasks) == 1, "junk rows dropped"
-    assert tasks[0] == {
-        "id": "55",
-        "title": "(untitled)",
-        "status": "todo",
-        "owner": "me",
-        "url": "",
-        "mr_url": "",
-    }, tasks
+    assert tasks == [
+        {"id": "55", "title": "Old", "status": "todo"},
+        {"id": "56", "title": "Hand-added", "status": "todo"},
+        {"id": "57", "title": "Copy-pasted", "status": "todo"},
+    ], tasks
 
 
 def test_grouping():
@@ -81,8 +83,8 @@ def test_grouping():
 
     options, first = _board_options(
         [
-            {"id": "9", "title": "t", "status": "working", "owner": "me"},
-            {"id": "8", "title": "t", "status": "done", "owner": "claude"},
+            {"id": "9", "title": "t", "status": "working"},
+            {"id": "8", "title": "t", "status": "done"},
         ]
     )
     assert rows(options)[first].id == "9", "first selectable row is the active task"
@@ -90,7 +92,7 @@ def test_grouping():
 
     # A task in a later group: the highlight must skip the empty groups' rows,
     # and the separators between them must not shift the index.
-    options, first = _board_options([{"id": "7", "title": "t", "status": "done", "owner": "me"}])
+    options, first = _board_options([{"id": "7", "title": "t", "status": "done"}])
     assert rows(options)[first].id == "7", rows(options)[first]
     assert not rows(options)[first].disabled, "highlight must land on a selectable row"
 
@@ -103,16 +105,10 @@ async def drive_tui():
 
     storage.save(
         [
-            {"id": "100", "title": "Linked", "status": "working", "owner": "claude",
-             "url": "https://example.com/wp/100", "mr_url": ""},
-            {"id": "200", "title": "Bare", "status": "todo", "owner": "me",
-             "url": "", "mr_url": ""},
+            {"id": "100", "title": "Active one", "status": "working"},
+            {"id": "200", "title": "Waiting", "status": "todo"},
         ]
     )
-    opened = []
-    import webbrowser
-
-    webbrowser.open = lambda url: opened.append(url)
 
     app = BoardApp()
     async with app.run_test() as pilot:
@@ -123,43 +119,29 @@ async def drive_tui():
         await pilot.pause()
         assert isinstance(app.screen, Detail) and app.screen.task_id == "100"
 
-        # Open task URL works; the MR button is disabled because there is no MR.
-        await pilot.press("o")
-        assert opened == ["https://example.com/wp/100"], opened
-        assert app.screen.query_one("#open_mr").disabled
-        assert not app.screen.query_one("#open_task").disabled
-
         # Status change returns to the dashboard.
         await pilot.press("d")
         await pilot.pause()
         assert storage.get("100")["status"] == "done"
 
-        # Add a task through the modal.
+        # Add a task through the modal; Enter saves.
         await pilot.press("a")
         await pilot.pause()
         assert isinstance(app.screen, AddScreen)
-        await pilot.press(*"300")
-        await pilot.press("tab")
-        await pilot.press(*"New one")
-        await pilot.press("ctrl+s")
+        await pilot.press(*"New one", "enter")
         await pilot.pause()
+        added = storage.find("new one")
+        assert added and added[0]["status"] == "todo", added
 
-        added = storage.get("300")
-        assert added and added["title"] == "New one" and added["status"] == "todo", added
-
-        # Add a second task, picking Claude as the owner from the keyboard.
+        # Empty title is refused, escape cancels.
         await pilot.press("a")
         await pilot.pause()
-        await pilot.press(*"400")
-        await pilot.press("tab")
-        await pilot.press(*"Claude one")
-        await pilot.press("tab")
-        await pilot.press("down")
-        await pilot.press("space")
-        await pilot.press("ctrl+s")
+        await pilot.press("enter")
         await pilot.pause()
-        assert storage.get("400")["owner"] == "claude", storage.get("400")
-        assert storage.get("300")["owner"] == "me", "Me is the default owner"
+        assert isinstance(app.screen, AddScreen), "empty title must not save"
+        await pilot.press("escape")
+        await pilot.pause()
+        assert len(storage.load()) == 3
 
         assert app.screen.query_one("#board").option_count > 0
 
@@ -186,7 +168,7 @@ async def drive_theme():
     del os.environ["FOCUS_THEME"]
 
 
-for check in (test_storage, test_status_commands, test_malformed_json, test_grouping):
+for check in (test_storage, test_cli, test_malformed_json, test_grouping):
     check()
     print(f"✓ {check.__name__}")
 asyncio.run(drive_tui())

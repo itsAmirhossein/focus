@@ -3,23 +3,13 @@
 from __future__ import annotations
 
 import os
-import webbrowser
 
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen, Screen
-from textual.widgets import (
-    Button,
-    Footer,
-    Input,
-    Label,
-    OptionList,
-    RadioButton,
-    RadioSet,
-    Static,
-)
+from textual.widgets import Button, Footer, Input, Label, OptionList, Static
 from textual.widgets.option_list import Option
 
 from . import storage
@@ -40,7 +30,6 @@ STATUS_STYLE = {
     "blocked": "red",
     "done": "green",
 }
-OWNER_LABEL = {"me": "👨‍💻 Me", "claude": "🤖 Claude"}
 
 # Dashboard groups, in the order they answer "what am I working on right now?".
 GROUPS = (
@@ -86,17 +75,11 @@ AddScreen { align: center middle; }
 
 
 def _task_option(task: dict) -> Option:
-    indent = " " * (len(task["id"]) + 4)
     prompt = Text.assemble(
         "  ",
-        (task["id"], "bold"),
-        "  ",
         task["title"],
-        "\n",
-        indent,
+        "\n    ",
         (STATUS_LABEL[task["status"]], STATUS_STYLE[task["status"]]),
-        "   ",
-        OWNER_LABEL[task["owner"]],
     )
     return Option(prompt, id=task["id"])
 
@@ -116,14 +99,6 @@ def _board_options(tasks: list[dict]) -> tuple[list, int | None]:
     rows = [option for option in options if option is not None]
     first_task = next((i for i, option in enumerate(rows) if option.id), None)
     return options, first_task
-
-
-def _open_url(screen: Screen, url: str) -> None:
-    if not url:
-        screen.notify("No URL for this task.", severity="warning")
-        return
-    webbrowser.open(url)  # macOS: osascript "open location" -> default browser
-    screen.notify(f"Opened {url}")
 
 
 class Board(Screen):
@@ -167,9 +142,7 @@ class Board(Screen):
 class Detail(Screen):
     BINDINGS = [
         Binding("escape", "back", "Back"),
-        Binding("o", "open_task", "Task URL"),
-        Binding("m", "open_mr", "MR URL"),
-        Binding("s", "set_status('working')", "Start"),
+        Binding("s","set_status('working')", "Start"),
         Binding("f", "set_status('self-review')", "Self-rev"),
         Binding("v", "set_status('review')", "Review"),
         Binding("d", "set_status('done')", "Done"),
@@ -192,11 +165,8 @@ class Detail(Screen):
     def compose(self) -> ComposeResult:
         task = self.task_data
         with VerticalScroll(id="detail"):
-            yield Static(f"{task.get('id', '')} — {task.get('title', '')}", id="detail-title")
+            yield Static(task.get("title", ""), id="detail-title")
             yield Static(self._body())
-            with Horizontal(classes="row"):
-                yield Button("Open Task", id="open_task", disabled=not task.get("url"))
-                yield Button("Open MR", id="open_mr", disabled=not task.get("mr_url"))
             with Horizontal(classes="row"):
                 yield Button("Start", id="s_working")
                 yield Button("Self-review", id="s_self_review")
@@ -210,45 +180,25 @@ class Detail(Screen):
     def _body(self) -> Text:
         task = self.task_data
         status = task.get("status", "todo")
-        body = Text.assemble(
-            "\nStatus:  ",
-            (STATUS_LABEL[status], STATUS_STYLE[status]),
-            "\nOwner:   ",
-            OWNER_LABEL[task.get("owner", "me")],
-        )
-        if task.get("url"):
-            body.append(f"\n\n🔗 Task\n{task['url']}")
-        if task.get("mr_url"):
-            body.append(f"\n\n🔀 Merge Request\n{task['mr_url']}")
-        return body
+        return Text.assemble("\nStatus:  ", (STATUS_LABEL[status], STATUS_STYLE[status]))
 
     def on_mount(self) -> None:
         if not self.task_data:
-            self.notify(f"Task {self.task_id} is gone.", severity="error")
+            self.notify("That task is gone.", severity="error")
             self.dismiss()
 
     def action_back(self) -> None:
         self.dismiss()
 
-    def action_open_task(self) -> None:
-        _open_url(self, self.task_data.get("url", ""))
-
-    def action_open_mr(self) -> None:
-        _open_url(self, self.task_data.get("mr_url", ""))
-
     def action_set_status(self, status: str) -> None:
         storage.set_status(self.task_id, status)
-        self.app.notify(f"{self.task_id} → {status.upper()}")
+        self.app.notify(f"{self.task_data['title']} → {status.upper()}")
         self.dismiss()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id or ""
         if button_id in self.BUTTON_STATUS:
             self.action_set_status(self.BUTTON_STATUS[button_id])
-        elif button_id == "open_task":
-            self.action_open_task()
-        elif button_id == "open_mr":
-            self.action_open_mr()
         else:
             self.dismiss()
 
@@ -262,51 +212,27 @@ class AddScreen(ModalScreen[dict | None]):
     def compose(self) -> ComposeResult:
         with VerticalScroll(id="add-box"):
             yield Label("New task")
-            yield Input(placeholder="Task ID", id="task_id")
             yield Input(placeholder="Task title", id="task_title")
-            yield Label("Owner  (↑↓ move, space selects)")
-            with RadioSet(id="owner"):
-                yield RadioButton(OWNER_LABEL["me"], value=True)
-                yield RadioButton(OWNER_LABEL["claude"])
-            yield Input(placeholder="Task URL (optional)", id="task_url")
-            yield Input(placeholder="MR URL (optional)", id="task_mr_url")
             with Horizontal(classes="row"):
                 yield Button("Save", variant="success", id="save")
                 yield Button("Cancel", id="cancel")
         yield Footer()
 
     def on_mount(self) -> None:
-        self.query_one("#task_id", Input).focus()
-
-    def _value(self, widget_id: str) -> str:
-        return self.query_one(f"#{widget_id}", Input).value.strip()
+        self.query_one("#task_title", Input).focus()
 
     def action_save(self) -> None:
-        task_id, title = self._value("task_id"), self._value("task_title")
-        if not task_id or not title:
-            self.notify("Task ID and title are required.", severity="error")
+        title = self.query_one("#task_title", Input).value.strip()
+        if not title:
+            self.notify("A title is required.", severity="error")
             return
-        task = {
-            "id": task_id,
-            "title": title,
-            "status": "todo",
-            "owner": "claude" if self.query_one(RadioSet).pressed_index == 1 else "me",
-            "url": self._value("task_url"),
-            "mr_url": self._value("task_mr_url"),
-        }
-        if not storage.add(task):
-            self.notify(f"Task {task_id} already exists.", severity="error")
-            return
-        self.dismiss(task)
+        self.dismiss(storage.add(title))
 
     def action_cancel(self) -> None:
         self.dismiss(None)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.input.id == "task_mr_url":
-            self.action_save()
-        else:
-            self.focus_next()
+        self.action_save()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save":
