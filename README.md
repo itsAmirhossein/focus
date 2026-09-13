@@ -35,16 +35,22 @@ focus block login
 Status commands take any unique part of a task's title, case-insensitive. If it
 matches more than one task, focus lists them and changes nothing.
 
-On the dashboard: `↑↓` navigate · `Enter` open · `a` add · `r` reload · `q` quit.
+The top line counts every group, so the whole board reads at a glance. Empty
+groups are hidden.
 
-### Task detail
+On the dashboard: `↑↓` navigate · `a` add · `r` reload · `q` quit.
 
-`Enter` on a task opens it. Every status is one keystroke away.
+### Moving a task
 
-![Task detail, showing status and the action buttons](docs/detail.png)
+Press a status key on the highlighted task — the highlight follows it to its new
+group:
 
-`s` start · `f` self-review · `v` review · `d` done · `b` block · `esc` back.
-The buttons are clickable too.
+`s` start · `f` self-review · `v` review · `b` block · `t` to do · `d` done
+
+Or press `Enter` to pick from a list, with the current status highlighted. The
+same keys work there; `esc` cancels.
+
+![The status picker over the board](docs/picker.png)
 
 ### Adding a task
 
