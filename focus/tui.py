@@ -1,4 +1,4 @@
-"""Textual UI: dashboard, task detail, add form."""
+"""Textual UI: board, status picker, add form."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import os
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, VerticalScroll
+from textual.containers import Horizontal, Vertical
 from textual.markup import escape
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, Footer, Input, Label, OptionList, Static
+from textual.widgets import Footer, Input, Label, OptionList, Static
 from textual.widgets.option_list import Option
 
 from . import storage
@@ -33,6 +33,16 @@ GROUPS = (
     ("Done", ("done",)),
 )
 
+# One key per status, shared by the board and the picker so they never disagree.
+MOVES = (
+    ("s", "working"),
+    ("f", "self-review"),
+    ("v", "review"),
+    ("b", "blocked"),
+    ("t", "todo"),
+    ("d", "done"),
+)
+
 CSS = """
 #top { height: auto; padding: 1 2; background: $boost; }
 #brand { width: auto; margin-right: 4; text-style: bold; color: $accent; }
@@ -46,21 +56,18 @@ CSS = """
     background: $background;
 }
 
-#detail { border: round $accent; margin: 1 2; padding: 0 1; }
-#detail-title { text-style: bold; color: $accent; }
-.row { height: auto; padding-top: 1; }
-.row Button { margin-right: 1; }
-
-AddScreen { align: center middle; }
-#add-box {
-    width: 66;
+StatusPicker, AddScreen { align: center middle; }
+#picker, #add-box {
+    width: 60;
+    max-width: 90%;
     height: auto;
-    max-height: 90%;
     padding: 1 2;
     border: round $accent;
     background: $surface;
 }
-#add-box Label { text-style: bold; }
+#picker-title, #add-box Label { width: 100%; text-style: bold; margin-bottom: 1; }
+#moves, #moves:focus { height: auto; border: none; padding: 0; background: $surface; }
+.hint { color: $text-muted; margin-top: 1; }
 """
 
 
@@ -105,7 +112,11 @@ def _summary(tasks: list[dict]) -> str:
 class Board(Screen):
     BINDINGS = [
         Binding("a", "add", "Add"),
-        Binding("r", "reload", "Reload"),
+        *(
+            Binding(key, f"move('{status}')", STATUS[status][1], show=status in ("working", "done"))
+            for key, status in MOVES
+        ),
+        Binding("r", "reload", "Reload", show=False),
         # "app." prefix required: action_quit lives on App, not on this screen.
         Binding("q", "app.quit", "Quit"),
     ]
@@ -120,129 +131,111 @@ class Board(Screen):
     def on_mount(self) -> None:
         self.reload()
 
-    def reload(self) -> None:
+    def reload(self, select: str | None = None) -> None:
+        """Redraw from disk, highlighting task `select` (if given) or the first task."""
         tasks = storage.load()
         self.query_one("#summary", Static).update(_summary(tasks))
         board = self.query_one("#board", OptionList)
         options, first_task = _board_options(tasks)
+        index = next((i for i, o in enumerate(options) if select and o.id == select), first_task)
         board.clear_options()
         board.add_options(options)
         board.focus()
-        if first_task is not None:
+        if index is not None:
             # After the refresh, or the list overwrites the highlight and the
             # first Enter lands on nothing.
-            self.call_after_refresh(setattr, board, "highlighted", first_task)
+            self.call_after_refresh(setattr, board, "highlighted", index)
+
+    def move(self, task_id: str, status: str) -> None:
+        task = storage.get(task_id)
+        if task and storage.set_status(task_id, status):
+            icon, label, _ = STATUS[status]
+            self.notify(f"{task['title']}  →  {icon} {label}", markup=False)
+        self.reload(select=task_id)  # the highlight follows the task to its new group
+
+    def action_move(self, status: str) -> None:
+        board = self.query_one("#board", OptionList)
+        if board.highlighted is not None:
+            task_id = board.get_option_at_index(board.highlighted).id
+            if task_id:
+                self.move(task_id, status)
 
     def action_reload(self) -> None:
         self.reload()
 
     def action_add(self) -> None:
-        self.app.push_screen(AddScreen(), callback=lambda _: self.reload())
+        self.app.push_screen(AddScreen(), callback=lambda task: self.reload(task and task["id"]))
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
-        if event.option_id:
-            self.app.push_screen(Detail(event.option_id), callback=lambda _: self.reload())
+        task = storage.get(event.option_id or "")
+        if not task:
+            return
+
+        def picked(status: str | None) -> None:
+            if status:
+                self.move(task["id"], status)
+
+        self.app.push_screen(StatusPicker(task), callback=picked)
 
 
-class Detail(Screen):
+class StatusPicker(ModalScreen[str | None]):
+    """Enter on a task: pick its new status with ↑↓ + enter, or its key."""
+
     BINDINGS = [
-        Binding("escape", "back", "Back"),
-        Binding("s", "set_status('working')", "Start"),
-        Binding("f", "set_status('self-review')", "Self-rev"),
-        Binding("v", "set_status('review')", "Review"),
-        Binding("d", "set_status('done')", "Done"),
-        Binding("b", "set_status('blocked')", "Block"),
+        Binding("escape", "pick", "Cancel"),
+        *(Binding(key, f"pick('{status}')", show=False) for key, status in MOVES),
     ]
 
-    BUTTON_STATUS = {
-        "s_working": "working",
-        "s_self_review": "self-review",
-        "s_review": "review",
-        "s_done": "done",
-        "s_blocked": "blocked",
-    }
-
-    def __init__(self, task_id: str) -> None:
+    def __init__(self, task: dict) -> None:
         super().__init__()
-        self.task_id = task_id
-        self.task_data = storage.get(task_id) or {}
+        self.task_data = task
 
     def compose(self) -> ComposeResult:
-        task = self.task_data
-        with VerticalScroll(id="detail"):
-            yield Static(task.get("title", ""), id="detail-title", markup=False)
-            yield Static(self._body())
-            with Horizontal(classes="row"):
-                yield Button("Start", id="s_working")
-                yield Button("Self-review", id="s_self_review")
-                yield Button("Review", id="s_review")
-            with Horizontal(classes="row"):
-                yield Button("Done", id="s_done", variant="success")
-                yield Button("Block", id="s_blocked", variant="error")
-                yield Button("Back", id="back")
+        current = self.task_data["status"]
+        options = []
+        for key, status in MOVES:
+            icon, label, color = STATUS[status]
+            now = "  [dim]← now[/]" if status == current else ""
+            options.append(Option(f"[bold $accent]{key}[/]   [{color}]{icon}  {label}[/]{now}", id=status))
+        with Vertical(id="picker"):
+            yield Static(self.task_data["title"], id="picker-title", markup=False)
+            yield OptionList(*options, id="moves")
+            yield Static("↑↓ enter to pick · or press a key · esc to cancel", classes="hint")
         yield Footer()
 
-    def _body(self) -> str:
-        icon, label, color = STATUS[self.task_data.get("status", "todo")]
-        return f"\nStatus:  [{color}]{icon} {label}[/]"
-
     def on_mount(self) -> None:
-        if not self.task_data:
-            self.notify("That task is gone.", severity="error")
-            self.dismiss()
+        moves = self.query_one("#moves", OptionList)
+        moves.highlighted = [status for _, status in MOVES].index(self.task_data["status"])
 
-    def action_back(self) -> None:
-        self.dismiss()
+    def action_pick(self, status: str | None = None) -> None:
+        self.dismiss(status)
 
-    def action_set_status(self, status: str) -> None:
-        storage.set_status(self.task_id, status)
-        self.app.notify(f"{self.task_data['title']} → {status.upper()}", markup=False)
-        self.dismiss()
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        button_id = event.button.id or ""
-        if button_id in self.BUTTON_STATUS:
-            self.action_set_status(self.BUTTON_STATUS[button_id])
-        else:
-            self.dismiss()
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        self.dismiss(event.option_id)
 
 
 class AddScreen(ModalScreen[dict | None]):
-    BINDINGS = [
-        Binding("escape", "cancel", "Cancel"),
-        Binding("ctrl+s", "save", "Save"),
-    ]
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
     def compose(self) -> ComposeResult:
-        with VerticalScroll(id="add-box"):
+        with Vertical(id="add-box"):
             yield Label("New task")
-            yield Input(placeholder="Task title", id="task_title")
-            with Horizontal(classes="row"):
-                yield Button("Save", variant="success", id="save")
-                yield Button("Cancel", id="cancel")
+            yield Input(placeholder="What are you working on?", id="task_title")
+            yield Static("enter to save · esc to cancel", classes="hint")
         yield Footer()
 
     def on_mount(self) -> None:
         self.query_one("#task_title", Input).focus()
 
-    def action_save(self) -> None:
-        title = self.query_one("#task_title", Input).value.strip()
-        if not title:
-            self.notify("A title is required.", severity="error")
-            return
-        self.dismiss(storage.add(title))
-
     def action_cancel(self) -> None:
         self.dismiss(None)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        self.action_save()
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "save":
-            self.action_save()
-        else:
-            self.dismiss(None)
+        title = event.value.strip()
+        if not title:
+            self.notify("Type a title first.", severity="warning")
+            return
+        self.dismiss(storage.add(title))
 
 
 def _apply_theme(app: App) -> None:

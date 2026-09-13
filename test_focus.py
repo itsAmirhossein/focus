@@ -10,7 +10,7 @@ from contextlib import redirect_stdout, redirect_stderr
 os.environ["FOCUS_HOME"] = tempfile.mkdtemp()  # must precede the imports below
 
 from focus import cli, storage  # noqa: E402
-from focus.tui import AddScreen, Detail, _board_options  # noqa: E402
+from focus.tui import AddScreen, Board, StatusPicker, _board_options  # noqa: E402
 
 
 def run_cli(*args):
@@ -107,21 +107,39 @@ async def drive_tui():
         ]
     )
 
+    def highlighted_id():
+        board = app.screen.query_one("#board")
+        return board.get_option_at_index(board.highlighted).id
+
     app = BoardApp()
     async with app.run_test() as pilot:
         await pilot.pause()
 
-        # Dashboard -> detail of the highlighted (first active) task.
+        # Enter opens the picker with the current status highlighted: down + enter
+        # moves "working" one step, to self-review.
         await pilot.press("enter")
         await pilot.pause()
-        assert isinstance(app.screen, Detail) and app.screen.task_id == "100"
+        assert isinstance(app.screen, StatusPicker), app.screen
+        await pilot.press("down", "enter")
+        await pilot.pause()
+        assert isinstance(app.screen, Board)
+        assert storage.get("100")["status"] == "self-review"
 
-        # Status change returns to the dashboard.
+        # Escape cancels; a key in the picker moves directly.
+        await pilot.press("enter", "escape")
+        await pilot.pause()
+        assert isinstance(app.screen, Board) and storage.get("100")["status"] == "self-review"
+        await pilot.press("enter", "v")
+        await pilot.pause()
+        assert storage.get("100")["status"] == "review"
+
+        # Hotkeys work straight from the board, and the highlight follows the task.
+        assert highlighted_id() == "100"
         await pilot.press("d")
         await pilot.pause()
-        assert storage.get("100")["status"] == "done"
+        assert storage.get("100")["status"] == "done" and highlighted_id() == "100"
 
-        # Add a task through the modal; Enter saves.
+        # Add a task through the modal; Enter saves and highlights it.
         await pilot.press("a")
         await pilot.pause()
         assert isinstance(app.screen, AddScreen)
@@ -129,6 +147,7 @@ async def drive_tui():
         await pilot.pause()
         added = storage.find("new one")
         assert added and added[0]["status"] == "todo", added
+        assert highlighted_id() == added[0]["id"]
 
         # Empty title is refused, escape cancels.
         await pilot.press("a")
