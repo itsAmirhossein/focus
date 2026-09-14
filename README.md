@@ -6,8 +6,8 @@ were doing.
 
 ![The focus dashboard, with tasks grouped by status](docs/dashboard.png)
 
-The top line counts every group, so the whole board reads at a glance. Empty
-groups are hidden.
+Each status is a column, with its task count in the header, so the whole board
+reads at a glance.
 
 A task is a title and one of five statuses (`TODO`, `WORKING`, `REVIEW`,
 `BLOCKED`, `DONE`). Nothing else — no IDs, links, owners, priorities,
@@ -38,12 +38,13 @@ Status commands take any unique part of a task's title, case-insensitive; an
 exact title always wins. If it matches more than one task, focus lists them and
 changes nothing.
 
-On the dashboard: `↑↓` navigate · `a` add · `r` reload · `q` quit.
+On the dashboard: `←→` switch column · `↑↓` move within it · `a` add · `r` reload ·
+`q` quit.
 
 ### Moving a task
 
 Press a status key on the highlighted task — the highlight follows it to its new
-group:
+column:
 
 `s` start · `v` review · `b` block · `t` to do · `d` done
 

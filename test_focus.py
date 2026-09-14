@@ -10,7 +10,7 @@ from contextlib import redirect_stdout, redirect_stderr
 os.environ["FOCUS_HOME"] = tempfile.mkdtemp()  # must precede the imports below
 
 from focus import cli, storage  # noqa: E402
-from focus.tui import AddScreen, Board, StatusPicker, _board_options  # noqa: E402
+from focus.tui import AddScreen, Board, StatusPicker  # noqa: E402
 
 
 def run_cli(*args):
@@ -79,25 +79,6 @@ def test_malformed_json():
     ], tasks
 
 
-def test_grouping():
-    options, first = _board_options(
-        [
-            {"id": "8", "title": "t", "status": "done"},
-            {"id": "9", "title": "t", "status": "working"},
-        ]
-    )
-    assert options[first].id == "9", "first selectable row is the active task"
-    assert [o.id for o in options if o.id] == ["9", "8"], "groups keep their order"
-    assert len(options) == 4, "empty groups are hidden, only two headers"
-
-    # A task in a later group: the highlight must skip the header row.
-    options, first = _board_options([{"id": "7", "title": "t", "status": "done"}])
-    assert options[first].id == "7" and not options[first].disabled, options[first]
-
-    options, first = _board_options([])
-    assert first is None and len(options) == 1, "empty board shows only a hint"
-
-
 async def drive_tui():
     from focus.tui import BoardApp
 
@@ -109,13 +90,19 @@ async def drive_tui():
         ]
     )
 
+    def focused_column():
+        return app.screen.focused.id
+
     def highlighted_id():
-        board = app.screen.query_one("#board")
-        return board.get_option_at_index(board.highlighted).id
+        column = app.screen.focused
+        return column.get_option_at_index(column.highlighted).id
 
     app = BoardApp()
-    async with app.run_test() as pilot:
+    async with app.run_test(size=(120, 30)) as pilot:
         await pilot.pause()
+
+        # The board opens on the Working column, where the work is.
+        assert focused_column() == "col-working" and highlighted_id() == "100"
 
         # Enter opens the picker with the current status highlighted: down + enter
         # moves "working" one step, to review.
@@ -135,11 +122,12 @@ async def drive_tui():
         await pilot.pause()
         assert storage.get("100")["status"] == "blocked"
 
-        # Hotkeys work straight from the board, and the highlight follows the task.
-        assert highlighted_id() == "100"
+        # Hotkeys work straight from the board, and focus follows the task's column.
+        assert focused_column() == "col-blocked" and highlighted_id() == "100"
         await pilot.press("d")
         await pilot.pause()
-        assert storage.get("100")["status"] == "done" and highlighted_id() == "100"
+        assert storage.get("100")["status"] == "done"
+        assert focused_column() == "col-done" and highlighted_id() == "100"
 
         # Add a task through the modal; Enter saves and highlights it.
         await pilot.press("a")
@@ -149,7 +137,13 @@ async def drive_tui():
         await pilot.pause()
         added = storage.find("new one")
         assert added and added[0]["status"] == "todo", added
-        assert highlighted_id() == added[0]["id"]
+        assert focused_column() == "col-todo" and highlighted_id() == added[0]["id"]
+
+        # ←→ switch columns and stop at the edges.
+        await pilot.press("right")
+        assert focused_column() == "col-working"
+        await pilot.press("left", "left")
+        assert focused_column() == "col-todo"
 
         # Empty title is refused, escape cancels.
         await pilot.press("a")
@@ -161,7 +155,7 @@ async def drive_tui():
         await pilot.pause()
         assert len(storage.load()) == 3
 
-        assert app.screen.query_one("#board").option_count > 0
+        assert app.screen.query_one("#col-todo").option_count == 2
 
         # q quits from the dashboard (needs the app.quit namespace, not quit).
         await pilot.press("q")
@@ -186,7 +180,7 @@ async def drive_theme():
     del os.environ["FOCUS_THEME"]
 
 
-for check in (test_storage, test_cli, test_malformed_json, test_grouping):
+for check in (test_storage, test_cli, test_malformed_json):
     check()
     print(f"✓ {check.__name__}")
 asyncio.run(drive_tui())
