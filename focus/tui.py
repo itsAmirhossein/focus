@@ -1,4 +1,4 @@
-"""Textual UI: board, status picker, add form."""
+"""Textual UI: the board and its small dialogs."""
 
 from __future__ import annotations
 
@@ -58,8 +58,8 @@ CSS = """
     text-style: $block-cursor-text-style;
 }
 
-StatusPicker, Prompt { align: center middle; }
-#picker, #prompt {
+StatusPicker, Prompt, ConfirmDelete { align: center middle; }
+#picker, #prompt, #confirm {
     width: 60;
     max-width: 90%;
     height: auto;
@@ -67,7 +67,7 @@ StatusPicker, Prompt { align: center middle; }
     border: round $accent;
     background: $surface;
 }
-#picker-title, #prompt Label { width: 100%; text-style: bold; margin-bottom: 1; }
+#picker-title, #prompt Label, #confirm Label { width: 100%; text-style: bold; margin-bottom: 1; }
 #moves, #moves:focus { height: auto; border: none; padding: 0; background: $surface; }
 .hint { color: $text-muted; margin-top: 1; }
 """
@@ -102,6 +102,8 @@ class Board(Screen):
             Binding(key, f"move('{status}')", verb, show=status in ("working", "done"))
             for key, status, verb in MOVES
         ),
+        Binding("e", "edit", "Edit"),
+        Binding("x", "delete", "Delete"),
         Binding("r", "reload", "Reload", show=False),
         # "app." prefix required: action_quit lives on App, not on this screen.
         Binding("q", "app.quit", "Quit"),
@@ -175,12 +177,40 @@ class Board(Screen):
         index = columns.index(self.focused) if self.focused in columns else 0
         columns[max(0, min(len(columns) - 1, index + step))].focus()
 
-    def action_move(self, status: str) -> None:
+    def _highlighted(self) -> dict | None:
+        """The task under the cursor in the focused column, if any."""
         column = self.focused
         if isinstance(column, OptionList) and column.highlighted is not None:
-            task_id = column.get_option_at_index(column.highlighted).id
-            if task_id:
-                self.move(task_id, status)
+            return storage.get(column.get_option_at_index(column.highlighted).id or "")
+        return None
+
+    def action_move(self, status: str) -> None:
+        task = self._highlighted()
+        if task:
+            self.move(task["id"], status)
+
+    def action_edit(self) -> None:
+        task = self._highlighted()
+        if not task:
+            return
+
+        def edited(title: str | None) -> None:
+            if title and storage.rename(task["id"], title):
+                self.reload(select=task["id"])
+
+        self.app.push_screen(Prompt("Edit task", "What are you working on?", task["title"]), callback=edited)
+
+    def action_delete(self) -> None:
+        task = self._highlighted()
+        if not task:
+            return
+
+        def answered(yes: bool | None) -> None:
+            if yes and storage.delete(task["id"]):
+                self.notify(f"Deleted: {task['title']}", markup=False)
+                self.reload()
+
+        self.app.push_screen(ConfirmDelete(task["title"]), callback=answered)
 
     def action_reload(self) -> None:
         self.reload()
@@ -253,7 +283,8 @@ class Prompt(ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="prompt"):
             yield Label(self.question, markup=False)
-            yield Input(self.initial, placeholder=self.placeholder_text)
+            # No select-all on focus: typing would replace the text you came to edit.
+            yield Input(self.initial, placeholder=self.placeholder_text, select_on_focus=False)
             optional = "" if self.required else ", empty is fine"
             yield Static(f"enter to save{optional} · esc to cancel", classes="hint")
         yield Footer()
@@ -270,6 +301,28 @@ class Prompt(ModalScreen[str | None]):
             self.notify("Type something first.", severity="warning")
             return
         self.dismiss(text)
+
+
+class ConfirmDelete(ModalScreen[bool]):
+    """Only y deletes; enter does not, so a stray keypress can't lose a task."""
+
+    BINDINGS = [
+        Binding("y", "answer(True)", "Delete"),
+        Binding("n,escape", "answer(False)", "Keep"),
+    ]
+
+    def __init__(self, title: str) -> None:
+        super().__init__()
+        self.title_text = title
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="confirm"):
+            yield Label(f"Delete “{self.title_text}”?", markup=False)
+            yield Static("y to delete · n or esc to keep it", classes="hint")
+        yield Footer()
+
+    def action_answer(self, yes: bool) -> None:
+        self.dismiss(yes)
 
 
 def _apply_theme(app: App) -> None:

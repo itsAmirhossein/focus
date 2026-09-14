@@ -84,13 +84,31 @@ def add(title: str) -> dict:
     return task
 
 
-def set_status(task_id: str, status: str, reason: str = "") -> bool:
-    """Set a task's status; `reason` is kept only while blocked. False if the task does not exist."""
+def _update(task_id: str, **fields) -> bool:
     tasks = load()
     for task in tasks:
         if task["id"] == task_id:
-            task["status"] = status
-            task["reason"] = reason.strip() if status == "blocked" else ""
+            task.update(fields)
             save(tasks)
             return True
     return False
+
+
+def set_status(task_id: str, status: str, reason: str = "") -> bool:
+    """Set a task's status; `reason` is kept only while blocked. False if the task does not exist."""
+    return _update(task_id, status=status, reason=reason.strip() if status == "blocked" else "")
+
+
+def rename(task_id: str, title: str) -> bool:
+    """Change a task's title. False if the title is empty or the task does not exist."""
+    return bool(title.strip()) and _update(task_id, title=title.strip())
+
+
+def delete(task_id: str) -> bool:
+    """Remove a task. False if the task does not exist."""
+    tasks = load()
+    kept = [t for t in tasks if t["id"] != task_id]
+    if len(kept) == len(tasks):
+        return False
+    save(kept)
+    return True

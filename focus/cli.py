@@ -15,15 +15,16 @@ STATUS_COMMANDS = {
 
 HELP = """focus — minimal terminal workboard
 
-  focus                  open the board
-  focus add [title]      add a task
-  focus start <title>    → WORKING
-  focus review <title>   → REVIEW
-  focus done <title>     → DONE
-  focus block <title>    → BLOCKED
+  focus                                open the board
+  focus add [title]                    add a task
+  focus start <title>                  → WORKING
+  focus review <title>                 → REVIEW
+  focus done <title>                   → DONE
+  focus block <title> [--why <reason>] → BLOCKED
+  focus rename <title> --to <title>    change a title
+  focus delete <title>                 remove a task
 
 <title> can be any unique part of the title, e.g. `focus done login`.
-Say why a task is blocked: `focus block login --why waiting on API keys`.
 Tasks live in {path}
 """.format(path=storage.DATA_FILE)
 
@@ -43,6 +44,26 @@ def _needs_terminal() -> bool:
         return False
     print("✗ focus needs an interactive terminal.", file=sys.stderr)
     return True
+
+
+def _split(args: list[str], flag: str) -> tuple[str, str]:
+    """Words before `flag` and words after it: [a, --to, b, c] -> ("a", "b c")."""
+    cut = args.index(flag) if flag in args else len(args)
+    return " ".join(args[:cut]).strip(), " ".join(args[cut + 1 :]).strip()
+
+
+def _find_one(query: str) -> dict | None:
+    """The single task matching `query`; otherwise say why and return None."""
+    matches = storage.find(query)
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        print(f"✗ No task matches “{query}”.", file=sys.stderr)
+    else:
+        print(f"✗ “{query}” matches {len(matches)} tasks, be more specific:", file=sys.stderr)
+        for task in matches:
+            print(f"    {task['title']}", file=sys.stderr)
+    return None
 
 
 def _run(args: list[str]) -> int:
@@ -77,26 +98,42 @@ def _run(args: list[str]) -> int:
         return 1
 
     if command in STATUS_COMMANDS:
-        # Words after --why are the reason: focus block login --why waiting on keys
-        cut = rest.index("--why") if "--why" in rest else len(rest)
-        query, reason = " ".join(rest[:cut]).strip(), " ".join(rest[cut + 1 :]).strip()
+        query, reason = _split(rest, "--why")
         if not query:
             print(f"usage: focus {command} <title>", file=sys.stderr)
             return 2
-        matches = storage.find(query)
-        if not matches:
-            print(f"✗ No task matches “{query}”.", file=sys.stderr)
+        task = _find_one(query)
+        if not task:
             return 1
-        if len(matches) > 1:
-            print(f"✗ “{query}” matches {len(matches)} tasks, be more specific:", file=sys.stderr)
-            for task in matches:
-                print(f"    {task['title']}", file=sys.stderr)
-            return 1
-        task, status = matches[0], STATUS_COMMANDS[command]
+        status = STATUS_COMMANDS[command]
         reason = reason or task["reason"]  # re-blocking without --why keeps the old reason
         storage.set_status(task["id"], status, reason)
         note = f" ({reason})" if status == "blocked" and reason else ""
         print(f"✓ {task['title']} → {status.upper()}{note}")
+        return 0
+
+    if command == "rename":
+        query, title = _split(rest, "--to")
+        if not query or not title:
+            print("usage: focus rename <title> --to <new title>", file=sys.stderr)
+            return 2
+        task = _find_one(query)
+        if not task:
+            return 1
+        storage.rename(task["id"], title)
+        print(f"✓ {task['title']} → {title}")
+        return 0
+
+    if command == "delete":
+        query = " ".join(rest).strip()
+        if not query:
+            print("usage: focus delete <title>", file=sys.stderr)
+            return 2
+        task = _find_one(query)
+        if not task:
+            return 1
+        storage.delete(task["id"])
+        print(f"✓ Deleted: {task['title']}")
         return 0
 
     print(f"✗ Unknown command: {command}\n", file=sys.stderr)

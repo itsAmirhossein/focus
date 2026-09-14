@@ -10,7 +10,7 @@ from contextlib import redirect_stdout, redirect_stderr
 os.environ["FOCUS_HOME"] = tempfile.mkdtemp()  # must precede the imports below
 
 from focus import cli, storage  # noqa: E402
-from focus.tui import Board, Prompt, StatusPicker  # noqa: E402
+from focus.tui import Board, ConfirmDelete, Prompt, StatusPicker  # noqa: E402
 
 
 def run_cli(*args):
@@ -36,6 +36,9 @@ def test_storage():
     assert len(storage.find("fix")) == 2
     assert storage.find("nope") == []
 
+    assert not storage.rename("1", "   "), "an empty title is refused"
+    assert not storage.delete("nope"), "deleting a missing task reports it"
+
 
 def test_cli():
     for command, status in cli.STATUS_COMMANDS.items():
@@ -59,6 +62,17 @@ def test_cli():
     code, out = run_cli("add", "Write", "docs")
     assert code == 0 and out == "✓ Added: Write docs", out
     assert storage.find("write docs")[0]["status"] == "todo"
+
+    code, out = run_cli("rename", "write", "docs", "--to", "Write", "the", "docs")
+    assert code == 0 and out == "✓ Write docs → Write the docs", out
+    assert storage.get("3")["title"] == "Write the docs"
+    assert run_cli("rename", "write")[0] == 2, "missing --to is a usage error"
+
+    code, out = run_cli("delete", "the", "docs")
+    assert code == 0 and out == "✓ Deleted: Write the docs", out
+    assert storage.get("3") is None
+    assert run_cli("delete", "nope")[0] == 1
+    assert run_cli("delete")[0] == 2, "missing title is a usage error"
 
     assert run_cli("start")[0] == 2, "missing title is a usage error"
     assert run_cli("frobnicate", "1")[0] == 2, "unknown command"
@@ -176,6 +190,29 @@ async def drive_tui():
         assert len(storage.load()) == 4
 
         assert app.screen.query_one("#col-todo").option_count == 2
+
+        # e edits the highlighted task's title, starting from the current one.
+        added_id = added[0]["id"]
+        assert highlighted_id() == added_id
+        await pilot.press("e")
+        await pilot.pause()
+        assert isinstance(app.screen, Prompt)
+        await pilot.press(*" again", "enter")
+        await pilot.pause()
+        assert storage.get(added_id)["title"] == "New one again"
+
+        # x asks first: esc keeps the task, y deletes it.
+        await pilot.press("x")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmDelete)
+        await pilot.press("escape")
+        await pilot.pause()
+        assert storage.get(added_id), "esc must keep the task"
+        await pilot.press("x")
+        await pilot.pause()
+        await pilot.press("y")
+        await pilot.pause()
+        assert storage.get(added_id) is None and len(storage.load()) == 3
 
         # q quits from the dashboard (needs the app.quit namespace, not quit).
         await pilot.press("q")

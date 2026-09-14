@@ -32,14 +32,16 @@ focus start login        # ✓ Fix login → WORKING
 focus review login
 focus done login
 focus block login --why waiting on API keys
+focus rename login --to Fix the login flow
+focus delete login
 ```
 
 Status commands take any unique part of a task's title, case-insensitive; an
 exact title always wins. If it matches more than one task, focus lists them and
 changes nothing.
 
-On the dashboard: `←→` switch column · `↑↓` move within it · `a` add · `r` reload ·
-`q` quit.
+On the dashboard: `←→` switch column · `↑↓` move within it · `a` add · `e` edit ·
+`x` delete · `r` reload · `q` quit.
 
 ### Moving a task
 
@@ -67,6 +69,12 @@ it, or leave it empty. Moving the task out of Blocked clears it.
 `Enter`. New tasks start as `TODO`; `esc` cancels.
 
 ![The add-task form](docs/add.png)
+
+### Editing and deleting
+
+`e` edits the highlighted task's title. `x` deletes it after asking — only `y`
+confirms, so a stray `Enter` can't lose a task. From the shell, `focus rename`
+and `focus delete` find the task by title, like the status commands.
 
 ## Themes
 
@@ -121,7 +129,6 @@ python -m venv .venv && .venv/bin/pip install textual
 
 ## Limitations
 
-- No delete or edit command — fix mistakes in `tasks.json`.
 - Last writer wins; two dashboards open at once can clobber each other's status
   change. Press `r` to reload.
 
