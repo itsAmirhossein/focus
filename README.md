@@ -59,6 +59,8 @@ Blocking a task asks why. The answer shows under the task in the Blocked column,
 so you can tell at a glance what each one is waiting on. Press `b` again to edit
 it, or leave it empty. Moving the task out of Blocked clears it.
 
+![The blocked-reason question, pre-filled for a task that is already blocked](docs/blocked.png)
+
 ### Adding a task
 
 `a` on the dashboard, or `focus add` from the shell. Type a title, press
