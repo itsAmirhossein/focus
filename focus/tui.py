@@ -41,7 +41,7 @@ CSS = """
     max-height: 100%;
     margin-right: 1;
     padding: 0 1;
-    border: round $panel-lighten-2;
+    border: round $foreground 20%;
     border-title-align: left;
     background: $background;
 }
@@ -125,7 +125,7 @@ class Board(Screen):
         for status, (icon, label, color) in STATUS.items():
             column = self.query_one(f"#col-{status}", OptionList)
             group = [t for t in tasks if t["status"] == status]
-            column.border_title = f"[bold {color}]{icon} {label.upper()}[/]  [dim]{len(group)}[/]"
+            column.border_title = f"[bold {color}]{icon} {label.upper()}[/]  [$text-muted]{len(group)}[/]"
             index = next((i for i, t in enumerate(group) if t["id"] == select), None)
             if index is not None:
                 target = column
