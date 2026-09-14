@@ -58,8 +58,8 @@ CSS = """
     text-style: $block-cursor-text-style;
 }
 
-StatusPicker, AddScreen { align: center middle; }
-#picker, #add-box {
+StatusPicker, Prompt { align: center middle; }
+#picker, #prompt {
     width: 60;
     max-width: 90%;
     height: auto;
@@ -67,7 +67,7 @@ StatusPicker, AddScreen { align: center middle; }
     border: round $accent;
     background: $surface;
 }
-#picker-title, #add-box Label { width: 100%; text-style: bold; margin-bottom: 1; }
+#picker-title, #prompt Label { width: 100%; text-style: bold; margin-bottom: 1; }
 #moves, #moves:focus { height: auto; border: none; padding: 0; background: $surface; }
 .hint { color: $text-muted; margin-top: 1; }
 """
@@ -77,6 +77,8 @@ def _task_option(task: dict) -> Option:
     title = escape(task["title"])
     if task["status"] == "done":
         title = f"[dim strike]{title}[/]"
+    elif task["status"] == "blocked" and task["reason"]:
+        title += f"\n[dim italic]↳ {escape(task['reason'])}[/]"
     return Option(title, id=task["id"])
 
 
@@ -147,10 +149,26 @@ class Board(Screen):
 
     def move(self, task_id: str, status: str) -> None:
         task = storage.get(task_id)
-        if task and storage.set_status(task_id, status):
-            icon, label, _ = STATUS[status]
-            self.notify(f"{task['title']}  →  {icon} {label}", markup=False)
-        self.reload(select=task_id)  # focus follows the task to its new column
+        if not task:
+            self.reload()
+            return
+        if status != "blocked":
+            self._apply(task, status)
+            return
+
+        def answered(reason: str | None) -> None:
+            if reason is not None:  # esc cancels the move
+                self._apply(task, status, reason)
+
+        question = f"Why is “{task['title']}” blocked?"
+        prompt = Prompt(question, "Waiting on…", task["reason"], required=False)
+        self.app.push_screen(prompt, callback=answered)
+
+    def _apply(self, task: dict, status: str, reason: str = "") -> None:
+        storage.set_status(task["id"], status, reason)
+        icon, label, _ = STATUS[status]
+        self.notify(f"{task['title']}  →  {icon} {label}", markup=False)
+        self.reload(select=task["id"])  # focus follows the task to its new column
 
     def action_column(self, step: int) -> None:
         columns = list(self.query(".column"))
@@ -168,7 +186,11 @@ class Board(Screen):
         self.reload()
 
     def action_add(self) -> None:
-        self.app.push_screen(AddScreen(), callback=lambda task: self.reload(task and task["id"]))
+        def added(title: str | None) -> None:
+            if title:
+                self.reload(select=storage.add(title)["id"])
+
+        self.app.push_screen(Prompt("New task", "What are you working on?"), callback=added)
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         task = storage.get(event.option_id or "")
@@ -218,28 +240,36 @@ class StatusPicker(ModalScreen[str | None]):
         self.dismiss(event.option_id)
 
 
-class AddScreen(ModalScreen[dict | None]):
+class Prompt(ModalScreen[str | None]):
+    """Ask for one line of text: enter returns it (stripped), esc returns None."""
+
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
+    def __init__(self, question: str, placeholder: str, initial: str = "", required: bool = True) -> None:
+        super().__init__()
+        self.question, self.placeholder_text = question, placeholder
+        self.initial, self.required = initial, required
+
     def compose(self) -> ComposeResult:
-        with Vertical(id="add-box"):
-            yield Label("New task")
-            yield Input(placeholder="What are you working on?", id="task_title")
-            yield Static("enter to save · esc to cancel", classes="hint")
+        with Vertical(id="prompt"):
+            yield Label(self.question, markup=False)
+            yield Input(self.initial, placeholder=self.placeholder_text)
+            optional = "" if self.required else ", empty is fine"
+            yield Static(f"enter to save{optional} · esc to cancel", classes="hint")
         yield Footer()
 
     def on_mount(self) -> None:
-        self.query_one("#task_title", Input).focus()
+        self.query_one(Input).focus()
 
     def action_cancel(self) -> None:
         self.dismiss(None)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        title = event.value.strip()
-        if not title:
-            self.notify("Type a title first.", severity="warning")
+        text = event.value.strip()
+        if self.required and not text:
+            self.notify("Type something first.", severity="warning")
             return
-        self.dismiss(storage.add(title))
+        self.dismiss(text)
 
 
 def _apply_theme(app: App) -> None:
@@ -264,7 +294,10 @@ class AddApp(App[dict | None]):
 
     def on_mount(self) -> None:
         _apply_theme(self)
-        self.push_screen(AddScreen(), callback=self.exit)
+        def added(title: str | None) -> None:
+            self.exit(storage.add(title) if title else None)
+
+        self.push_screen(Prompt("New task", "What are you working on?"), callback=added)
 
 
 def run_board() -> None:

@@ -10,7 +10,7 @@ from contextlib import redirect_stdout, redirect_stderr
 os.environ["FOCUS_HOME"] = tempfile.mkdtemp()  # must precede the imports below
 
 from focus import cli, storage  # noqa: E402
-from focus.tui import AddScreen, Board, StatusPicker  # noqa: E402
+from focus.tui import Board, Prompt, StatusPicker  # noqa: E402
 
 
 def run_cli(*args):
@@ -28,7 +28,7 @@ def test_storage():
     assert (first["id"], second["id"]) == ("1", "2"), "ids are assigned in order"
 
     tasks = storage.load()
-    assert tasks[0] == {"id": "1", "title": "Fix login", "status": "todo"}, tasks
+    assert tasks[0] == {"id": "1", "title": "Fix login", "status": "todo", "reason": ""}, tasks
     assert json.loads(storage.DATA_FILE.read_text())[1]["title"] == "Fix login redirect"
 
     assert [t["id"] for t in storage.find("REDIRECT")] == ["2"], "match ignores case"
@@ -42,6 +42,14 @@ def test_cli():
         code, out = run_cli(command, "fix", "login")  # words join, no quotes needed
         assert code == 0 and out == f"✓ Fix login → {status.upper()}", out
         assert storage.get("1")["status"] == status
+
+    code, out = run_cli("block", "fix", "login", "--why", "waiting", "on", "keys")
+    assert code == 0 and out == "✓ Fix login → BLOCKED (waiting on keys)", out
+    assert storage.get("1")["reason"] == "waiting on keys"
+    run_cli("block", "fix", "login")
+    assert storage.get("1")["reason"] == "waiting on keys", "re-blocking keeps the reason"
+    run_cli("start", "fix", "login")
+    assert storage.get("1")["reason"] == "", "leaving Blocked clears the reason"
 
     code, out = run_cli("done", "fix")
     assert code == 1 and "matches 2 tasks" in out and "Fix login redirect" in out, out
@@ -72,10 +80,10 @@ def test_malformed_json():
     ]))
     tasks = storage.load()
     assert tasks == [
-        {"id": "55", "title": "Old", "status": "todo"},
-        {"id": "56", "title": "Hand-added", "status": "todo"},
-        {"id": "57", "title": "Copy-pasted", "status": "todo"},
-        {"id": "9", "title": "Retired status", "status": "working"},
+        {"id": "55", "title": "Old", "status": "todo", "reason": ""},
+        {"id": "56", "title": "Hand-added", "status": "todo", "reason": ""},
+        {"id": "57", "title": "Copy-pasted", "status": "todo", "reason": ""},
+        {"id": "9", "title": "Retired status", "status": "working", "reason": ""},
     ], tasks
 
 
@@ -87,6 +95,7 @@ async def drive_tui():
             {"id": "100", "title": "Active one", "status": "working"},
             # Brackets must render as text, not crash as markup.
             {"id": "200", "title": "Fix [urgent] bug", "status": "todo"},
+            {"id": "300", "title": "Stuck one", "status": "blocked", "reason": "needs [ops] access"},
         ]
     )
 
@@ -118,21 +127,32 @@ async def drive_tui():
         await pilot.press("enter", "escape")
         await pilot.pause()
         assert isinstance(app.screen, Board) and storage.get("100")["status"] == "review"
+        # Blocking asks why; esc on that question cancels the move.
         await pilot.press("enter", "b")
         await pilot.pause()
-        assert storage.get("100")["status"] == "blocked"
+        assert isinstance(app.screen, Prompt), app.screen
+        await pilot.press("escape")
+        await pilot.pause()
+        assert storage.get("100")["status"] == "review"
+        await pilot.press("b")
+        await pilot.pause()
+        await pilot.press(*"waiting on keys", "enter")
+        await pilot.pause()
+        task = storage.get("100")
+        assert (task["status"], task["reason"]) == ("blocked", "waiting on keys"), task
 
         # Hotkeys work straight from the board, and focus follows the task's column.
         assert focused_column() == "col-blocked" and highlighted_id() == "100"
         await pilot.press("d")
         await pilot.pause()
         assert storage.get("100")["status"] == "done"
+        assert storage.get("100")["reason"] == "", "leaving Blocked clears the reason"
         assert focused_column() == "col-done" and highlighted_id() == "100"
 
         # Add a task through the modal; Enter saves and highlights it.
         await pilot.press("a")
         await pilot.pause()
-        assert isinstance(app.screen, AddScreen)
+        assert isinstance(app.screen, Prompt)
         await pilot.press(*"New one", "enter")
         await pilot.pause()
         added = storage.find("new one")
@@ -150,10 +170,10 @@ async def drive_tui():
         await pilot.pause()
         await pilot.press("enter")
         await pilot.pause()
-        assert isinstance(app.screen, AddScreen), "empty title must not save"
+        assert isinstance(app.screen, Prompt), "empty title must not save"
         await pilot.press("escape")
         await pilot.pause()
-        assert len(storage.load()) == 3
+        assert len(storage.load()) == 4
 
         assert app.screen.query_one("#col-todo").option_count == 2
 

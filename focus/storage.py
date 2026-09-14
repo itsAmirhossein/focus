@@ -22,6 +22,7 @@ def _clean(task: dict) -> dict:
         "id": str(task.get("id") or "").strip(),
         "title": str(task.get("title") or "").strip(),
         "status": status if status in STATUSES else "todo",
+        "reason": str(task.get("reason") or "").strip(),
     }
 
 
@@ -83,12 +84,13 @@ def add(title: str) -> dict:
     return task
 
 
-def set_status(task_id: str, status: str) -> bool:
-    """Set a task's status. False if the task does not exist."""
+def set_status(task_id: str, status: str, reason: str = "") -> bool:
+    """Set a task's status; `reason` is kept only while blocked. False if the task does not exist."""
     tasks = load()
     for task in tasks:
         if task["id"] == task_id:
             task["status"] = status
+            task["reason"] = reason.strip() if status == "blocked" else ""
             save(tasks)
             return True
     return False

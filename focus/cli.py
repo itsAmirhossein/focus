@@ -23,6 +23,7 @@ HELP = """focus — minimal terminal workboard
   focus block <title>    → BLOCKED
 
 <title> can be any unique part of the title, e.g. `focus done login`.
+Say why a task is blocked: `focus block login --why waiting on API keys`.
 Tasks live in {path}
 """.format(path=storage.DATA_FILE)
 
@@ -76,7 +77,9 @@ def _run(args: list[str]) -> int:
         return 1
 
     if command in STATUS_COMMANDS:
-        query = " ".join(rest).strip()
+        # Words after --why are the reason: focus block login --why waiting on keys
+        cut = rest.index("--why") if "--why" in rest else len(rest)
+        query, reason = " ".join(rest[:cut]).strip(), " ".join(rest[cut + 1 :]).strip()
         if not query:
             print(f"usage: focus {command} <title>", file=sys.stderr)
             return 2
@@ -90,8 +93,10 @@ def _run(args: list[str]) -> int:
                 print(f"    {task['title']}", file=sys.stderr)
             return 1
         task, status = matches[0], STATUS_COMMANDS[command]
-        storage.set_status(task["id"], status)
-        print(f"✓ {task['title']} → {status.upper()}")
+        reason = reason or task["reason"]  # re-blocking without --why keeps the old reason
+        storage.set_status(task["id"], status, reason)
+        note = f" ({reason})" if status == "blocked" and reason else ""
+        print(f"✓ {task['title']} → {status.upper()}{note}")
         return 0
 
     print(f"✗ Unknown command: {command}\n", file=sys.stderr)

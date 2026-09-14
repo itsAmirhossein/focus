@@ -31,7 +31,7 @@ focus add Fix login      # add a task (no form)
 focus start login        # ✓ Fix login → WORKING
 focus review login
 focus done login
-focus block login
+focus block login --why waiting on API keys
 ```
 
 Status commands take any unique part of a task's title, case-insensitive; an
@@ -52,6 +52,12 @@ Or press `Enter` to pick from a list, with the current status highlighted. The
 same keys work there; `esc` cancels.
 
 ![The status picker over the board](docs/picker.png)
+
+### Blocked tasks
+
+Blocking a task asks why. The answer shows under the task in the Blocked column,
+so you can tell at a glance what each one is waiting on. Press `b` again to edit
+it, or leave it empty. Moving the task out of Blocked clears it.
 
 ### Adding a task
 
@@ -89,8 +95,9 @@ Tasks live in `~/.focus/tasks.json`, created on first write:
 [
   {
     "id": "3",
-    "title": "Loading studies takes 8s on cold start",
-    "status": "working"
+    "title": "Push notifications on Android 15",
+    "status": "blocked",
+    "reason": "Waiting on Firebase keys from ops"
   }
 ]
 ```
@@ -98,6 +105,7 @@ Tasks live in `~/.focus/tasks.json`, created on first write:
 Edit it by hand if you like. `id` is focus's internal key — leave it out on new
 rows and one is assigned. Fields from older versions (`owner`, `url`, `mr_url`)
 are dropped the next time focus saves, and `self-review` tasks become `working`.
+`reason` is kept only while a task is blocked.
 
 A file that cannot be parsed is moved aside to `tasks.json.corrupt` rather than
 overwritten. Set `FOCUS_HOME` to keep the data somewhere else.
